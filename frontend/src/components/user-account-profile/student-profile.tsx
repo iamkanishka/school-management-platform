@@ -7,6 +7,7 @@ import {
   ParentsAndGuardianInformation,
   PersonalDetail
 } from '@/domains/student/components/views';
+import { useLazyGenerateStudentReportQuery } from '@/domains/student/api/report-api';
 
 type StudentProfileProps = {
   id?: string;
@@ -37,6 +38,18 @@ export const StudentProfile: React.FC<StudentProfileProps> = ({ id }) => {
     reporterName
   } = student;
 
+  const [generateReport, { isLoading }] = useLazyGenerateStudentReportQuery();
+
+ const handleGenerateReport = async () => {
+  if (!id) return;
+
+  try {
+    await generateReport({ id, name }).unwrap();
+  } catch (error) {
+    console.error('Download failed', error);
+  }
+};
+
   return (
     <Grid2 container spacing={3}>
       <Grid2 size={{ xs: 12, md: 5 }}>
@@ -46,6 +59,8 @@ export const StudentProfile: React.FC<StudentProfileProps> = ({ id }) => {
           email={email}
           selectedClass={className}
           section={section}
+          isGenerating={isLoading}
+          onGenerateReport={handleGenerateReport}
         />
       </Grid2>
       <Grid2 size={{ xs: 12, md: 7 }}>
