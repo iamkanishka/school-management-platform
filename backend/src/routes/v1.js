@@ -1,8 +1,8 @@
 const express = require("express");
 const router = express.Router();
 
-const { authenticateToken, handle404Error, csrfProtection, checkApiAccess } = require("../middlewares");
-const { studentsRoutes } = require("../modules/students/sudents-router.js");
+const { authenticateToken, handle404Error, csrfProtection, checkApiAccess, authenticateApiKey } = require("../middlewares");
+const { studentsRoutes } = require("../modules/students/students-router.js");
 const { authRoutes } = require("../modules/auth/auth-router.js");
 const { rpRoutes } = require("../modules/roles-and-permissions/rp-router.js");
 const { leaveRoutes } = require("../modules/leave/leave-router.js");
@@ -16,6 +16,10 @@ const { sectionRoutes } = require("../modules/sections/section-router.js");
 const { departmentRoutes } = require("../modules/departments/department-router.js");
 const { handleGetDashboardData } = require("../modules/dashboard/dashboard-controller.js");
 const { accessControlRoutes } = require("../modules/access-control/access-control-router.js");
+const { handleInternalGetStudentDetail } = require("../modules/students/students-controller.js");
+
+// internal service-to-service route — must be before the JWT-protected /students block
+router.get("/students/internal/:id", authenticateApiKey, handleInternalGetStudentDetail);
 
 router.get("/teachers", authenticateToken, csrfProtection, checkApiAccess, handleGetAllTeachers);
 router.get("/dashboard", authenticateToken, csrfProtection, checkApiAccess, handleGetDashboardData);
