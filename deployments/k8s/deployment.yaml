@@ -1,0 +1,389 @@
+################################################################################
+# PostgreSQL Deployment + PVC
+################################################################################
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pgdata-pvc
+  labels:
+    app: school-mgmt
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  labels:
+    app: school-mgmt
+    component: postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      component: postgres
+  strategy:
+    type: Recreate          # Required for single-replica stateful workloads with RWO volumes
+  template:
+    metadata:
+      labels:
+        app: school-mgmt
+        component: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: school-mgmt-config
+                  key: POSTGRES_DB
+            - name: POSTGRES_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: school-mgmt-config
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: school-mgmt-secret
+                  key: POSTGRES_PASSWORD
+          volumeMounts:
+            - name: pgdata
+              mountPath: /var/lib/postgresql/data
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres", "-d", "school_mgmt"]
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres", "-d", "school_mgmt"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+      volumes:
+        - name: pgdata
+          persistentVolumeClaim:
+            claimName: pgdata-pvc
+---
+################################################################################
+# Seeder Job (runs once after postgres is ready)
+################################################################################
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: seeder
+  labels:
+    app: school-mgmt
+    component: seeder
+spec:
+  ttlSecondsAfterFinished: 300   # Clean up 5 min after completion
+  backoffLimit: 5
+  template:
+    metadata:
+      labels:
+        app: school-mgmt
+        component: seeder
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        - name: wait-for-postgres
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z postgres-service 5432; do
+                echo "Waiting for postgres..."; sleep 3;
+              done
+      containers:
+        - name: seeder
+          image: seeder:latest          # Replace with your registry image, e.g. ghcr.io/org/seeder:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: DB_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: school-mgmt-config
+                  key: DB_HOST
+            - name: DB_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: school-mgmt-config
+                  key: DB_USER
+            - name: DB_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: school-mgmt-config
+                  key: DB_NAME
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: school-mgmt-secret
+                  key: DB_PASSWORD
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+---
+################################################################################
+# Backend Deployment
+################################################################################
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  labels:
+    app: school-mgmt
+    component: backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      component: backend
+  template:
+    metadata:
+      labels:
+        app: school-mgmt
+        component: backend
+    spec:
+      initContainers:
+        - name: wait-for-postgres
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z postgres-service 5432; do
+                echo "Waiting for postgres..."; sleep 3;
+              done
+      containers:
+        - name: backend
+          image: backend:latest          # Replace with your registry image
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5007
+          envFrom:
+            - configMapRef:
+                name: school-mgmt-config
+            - secretRef:
+                name: school-mgmt-secret
+          # Override DATABASE_URL to use the k8s service name
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: school-mgmt-config
+                  key: DATABASE_URL
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5007
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5007
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "512Mi"
+---
+################################################################################
+# PDF Service Deployment
+################################################################################
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pdf-service
+  labels:
+    app: school-mgmt
+    component: pdf-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      component: pdf-service
+  template:
+    metadata:
+      labels:
+        app: school-mgmt
+        component: pdf-service
+    spec:
+      initContainers:
+        - name: wait-for-backend
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z backend-service 5007; do
+                echo "Waiting for backend..."; sleep 3;
+              done
+      containers:
+        - name: pdf-service
+          image: pdf-service:latest      # Replace with your registry image
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: school-mgmt-config
+                  key: PDF_SERVICE_PORT
+            - name: NODEJS_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: school-mgmt-config
+                  key: NODEJS_BASE_URL
+            - name: ALLOWED_ORIGIN
+              valueFrom:
+                configMapKeyRef:
+                  name: school-mgmt-config
+                  key: ALLOWED_ORIGIN
+            - name: NODEJS_TIMEOUT
+              valueFrom:
+                configMapKeyRef:
+                  name: school-mgmt-config
+                  key: NODEJS_TIMEOUT
+            - name: RATE_LIMIT
+              valueFrom:
+                configMapKeyRef:
+                  name: school-mgmt-config
+                  key: RATE_LIMIT
+            - name: LOG_LEVEL
+              valueFrom:
+                configMapKeyRef:
+                  name: school-mgmt-config
+                  key: LOG_LEVEL
+            - name: PDF_OUTPUT_DIR
+              valueFrom:
+                configMapKeyRef:
+                  name: school-mgmt-config
+                  key: PDF_OUTPUT_DIR
+            - name: MAX_PDF_SIZE
+              valueFrom:
+                configMapKeyRef:
+                  name: school-mgmt-config
+                  key: MAX_PDF_SIZE
+            - name: NODEJS_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: school-mgmt-secret
+                  key: NODEJS_API_KEY
+            - name: API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: school-mgmt-secret
+                  key: API_KEY
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "512Mi"
+---
+################################################################################
+# Frontend Deployment
+################################################################################
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  labels:
+    app: school-mgmt
+    component: frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      component: frontend
+  template:
+    metadata:
+      labels:
+        app: school-mgmt
+        component: frontend
+    spec:
+      containers:
+        - name: frontend
+          # NOTE: VITE_* vars are baked in at build time (build args).
+          # Rebuild the image with the correct args for your target environment.
+          # Runtime env vars below only override if your entrypoint supports env substitution.
+          image: frontend:latest         # Replace with your registry image
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
+          env:
+            - name: VITE_API_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: school-mgmt-config
+                  key: VITE_API_URL
+            - name: VITE_REPORT_API_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: school-mgmt-config
+                  key: VITE_REPORT_API_URL
+            - name: VITE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: school-mgmt-secret
+                  key: VITE_API_KEY
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 20
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
