@@ -1,0 +1,77 @@
+################################################################################
+# PostgreSQL Service (ClusterIP — internal only)
+################################################################################
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-service
+  labels:
+    app: school-mgmt
+    component: postgres
+spec:
+  type: ClusterIP
+  selector:
+    component: postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+---
+################################################################################
+# Backend Service (ClusterIP — accessed internally by pdf-service & frontend)
+################################################################################
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+  labels:
+    app: school-mgmt
+    component: backend
+spec:
+  type: ClusterIP
+  selector:
+    component: backend
+  ports:
+    - name: http
+      port: 5007
+      targetPort: 5007
+---
+################################################################################
+# PDF Service (ClusterIP — accessed internally; exposed via NodePort for local dev)
+################################################################################
+apiVersion: v1
+kind: Service
+metadata:
+  name: pdf-service
+  labels:
+    app: school-mgmt
+    component: pdf-service
+spec:
+  type: NodePort
+  selector:
+    component: pdf-service
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+      nodePort: 30082        # Mirrors docker-compose host port 8082 → container 8080
+---
+################################################################################
+# Frontend Service (NodePort — browser-accessible on port 30000)
+################################################################################
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-service
+  labels:
+    app: school-mgmt
+    component: frontend
+spec:
+  type: NodePort
+  selector:
+    component: frontend
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+      nodePort: 30000        # Access the app at http://<node-ip>:30000
