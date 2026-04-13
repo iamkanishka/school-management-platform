@@ -1,0 +1,17 @@
+FROM node:18-alpine
+
+# Set working directory
+WORKDIR /app
+
+# Install dependencies (better caching)
+COPY package*.json ./
+RUN npm install
+
+# Copy all source code
+COPY . .
+
+# Expose backend port
+EXPOSE 5007
+
+# Start the backend server
+CMD ["npm", "start"]
