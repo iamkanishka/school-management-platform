@@ -1,0 +1,42 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: school-mgmt-config
+  labels:
+    app: school-mgmt
+data:
+  # Postgres
+  POSTGRES_DB: "school_mgmt"
+  POSTGRES_USER: "postgres"
+
+  # Backend
+  PORT: "5007"
+  DATABASE_URL: "postgresql://postgres:postgres@postgres-service:5432/school_mgmt"
+  JWT_ACCESS_TOKEN_TIME_IN_MS: "900000"
+  JWT_REFRESH_TOKEN_TIME_IN_MS: "28800000"
+  CSRF_TOKEN_TIME_IN_MS: "950000"
+  EMAIL_VERIFICATION_TOKEN_TIME_IN_MS: "18000000"
+  PASSWORD_SETUP_TOKEN_TIME_IN_MS: "300000"
+  MAIL_FROM_USER: "your-desired-name@domain-name.com"
+  UI_URL: "http://localhost:3000"
+  API_URL: "http://backend-service:5007"
+  COOKIE_DOMAIN: "localhost"
+
+  # Seeder
+  DB_HOST: "postgres-service"
+  DB_USER: "postgres"
+  DB_NAME: "school_mgmt"
+
+  # PDF Service
+  PDF_SERVICE_PORT: "8080"
+  NODEJS_BASE_URL: "http://backend-service:5007"
+  ALLOWED_ORIGIN: "http://localhost:3000"
+  NODEJS_TIMEOUT: "10s"
+  RATE_LIMIT: "100"
+  LOG_LEVEL: "info"
+  PDF_OUTPUT_DIR: "/tmp/pdfs"
+  MAX_PDF_SIZE: "10485760"
+
+  # Frontend (build-time args are baked in; these are runtime overrides if your image supports them)
+  VITE_API_URL: "http://localhost:5007"
+  VITE_REPORT_API_URL: "http://localhost:8082"
