@@ -6,6 +6,7 @@ const { handleEmailVerificationToken } = require("./handle-email-verification-to
 const { handlePasswordSetupToken } = require("./handle-password-setup-token");
 const { checkApiAccess } = require("./check-api-access");
 const { isUserAdmin } = require("./is-user-admin");
+const { authenticateApiKey } = require("./authenticate-api-key");
 
 module.exports = {
     authenticateToken,
@@ -15,5 +16,6 @@ module.exports = {
     handleEmailVerificationToken,
     handlePasswordSetupToken,
     checkApiAccess,
-    isUserAdmin
+    isUserAdmin,
+    authenticateApiKey
 };
