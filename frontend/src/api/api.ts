@@ -10,7 +10,7 @@ import { Tag } from './tag-types';
 import { resetUser } from '@/domains/auth/slice';
 
 const baseQuery = fetchBaseQuery({
-  baseUrl: `${import.meta.env.VITE_API_URL}/api/v1`,
+  baseUrl: `${import.meta.env.VITE_API_URL || 'http://localhost:5007'}/api/v1`,
   prepareHeaders: (headers) => {
     const csrfToken = Cookies.get('csrfToken');
     if (csrfToken) {
