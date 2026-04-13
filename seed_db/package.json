@@ -1,0 +1,16 @@
+{
+"name": "school-db-seeder",
+"version": "1.0.0",
+"description": "High-performance PostgreSQL seeder for school management system",
+"main": "seed.js",
+"type": "commonjs",
+"scripts": {
+"seed": "node seed.js",
+"seed:large": "node seed.js",
+"dev": "node seed.js"
+},
+"dependencies": {
+"pg": "^8.11.5",
+"@faker-js/faker": "^9.0.0"
+}
+}
